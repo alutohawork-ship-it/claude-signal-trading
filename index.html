@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Signal Trading</title>
+<style>
+  :root { color-scheme: dark; --bg:#131722; --panel:#1e222d; --panel2:#171b26; --line:#2a2e39; --text:#d1d4dc; --muted:#787b86; --accent:#2962ff; --buy:#26a69a; --sell:#ef5350; --none:#f0b90b; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  button { font: inherit; cursor: pointer; }
+
+  /* Top bar */
+  .top { height: 52px; display:flex; align-items:center; gap:16px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top:0; z-index: 20; }
+  .brand { font-weight: 700; white-space: nowrap; display:flex; align-items:center; gap:8px; }
+  .brand .dot { width:10px; height:10px; border-radius:50%; background: linear-gradient(135deg, #7c5cff, #2962ff); }
+  .searchbox { position: relative; flex: 0 1 340px; }
+  .searchbox input { width:100%; background: var(--panel2); border:1px solid var(--line); color: var(--text); border-radius: 6px; padding: 7px 10px; outline: none; }
+  .searchbox input:focus { border-color: var(--accent); }
+  .dropdown { position:absolute; top: calc(100% + 4px); left:0; right:0; background: var(--panel); border:1px solid var(--line); border-radius: 6px; display:none; max-height: 320px; overflow:auto; z-index: 30; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .dropdown.open { display:block; }
+  .dd-item { display:grid; grid-template-columns: 90px 1fr auto; gap:8px; align-items:center; padding: 8px 10px; cursor:pointer; }
+  .dd-item b { font-weight:600; }
+  .dd-item span { color: var(--muted); overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd-item em { font-style: normal; color: var(--muted); font-size: 11px; }
+  .dd-item.active, .dd-item:hover { background: #2a2e39; }
+  .styles { display:flex; gap:6px; flex-wrap: wrap; }
+  .styles button { background: transparent; border:1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 6px 12px; }
+  .styles button.active { background: rgba(41,98,255,.18); border-color: var(--accent); color: #fff; }
+
+  /* Layout */
+  .layout { display:grid; grid-template-columns: 240px 1fr; min-height: calc(100% - 52px); }
+  .side { background: var(--panel); border-right: 1px solid var(--line); padding: 6px 0 10px; overflow-y: auto; }
+  .side h4 { margin: 12px 14px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  .wl { display:flex; justify-content: space-between; align-items:center; padding: 7px 14px; cursor:pointer; }
+  .wl:hover { background: #2a2e39; }
+  .wl.sel { background: rgba(41,98,255,.18); }
+  .wl .name { font-weight:600; }
+  .wl .sub { font-size: 11px; color: var(--muted); }
+  .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .BUY { background: rgba(38,166,154,.18); color: var(--buy); }
+  .SELL { background: rgba(239,83,80,.18); color: var(--sell); }
+  .NO_TRADE { background: rgba(240,185,11,.15); color: var(--none); }
+  .ERR { background: rgba(239,83,80,.18); color: var(--sell); }
+  .main { padding: 12px; display:flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .card-head { display:flex; justify-content: space-between; align-items:center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .title { font-weight: 700; font-size: 16px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .levels { display:grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+  .levels div { background: var(--panel2); border-radius: 6px; padding: 8px; }
+  .levels span { display:block; color: var(--muted); font-size: 11px; }
+  .levels b { font-weight: 600; }
+  .reason { margin-top: 8px; line-height: 1.5; }
+  .actions { display:flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .btn { background: var(--accent); color:#fff; border:0; border-radius: 6px; padding: 7px 14px; }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .chartbox { height: 480px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .status { color: var(--muted); font-size: 12px; min-height: 16px; }
+  .notice { background: #2a1f0b; border: 1px solid #5c4313; color: #f5d08a; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  .disclaimer { color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; }
+    .side { border-right: 0; border-bottom: 1px solid var(--line); max-height: 220px; }
+    .levels { grid-template-columns: repeat(2, 1fr); }
+    .top { height: auto; flex-wrap: wrap; padding: 10px; }
+    .searchbox { flex: 1 1 100%; }
+    .chartbox { height: 380px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="dot"></span>Claude Signal Trading</div>
+  <div class="searchbox">
+    <input id="search" type="text" placeholder="Cari pair, mis. EUR, XAU, BTC..." autocomplete="off">
+    <div id="dropdown" class="dropdown"></div>
+  </div>
+  <div class="styles">
+    <button data-action="style" data-style="scalping">Scalping</button>
+    <button data-action="style" data-style="intraday">Intraday</button>
+    <button data-action="style" data-style="daytrade">Day Trading</button>
+    <button data-action="style" data-style="swing">Swing</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side" id="watchlist"></aside>
+  <main class="main">
+    <div id="notice"></div>
+    <section id="best"></section>
+    <div class="chartbox" id="chart"></div>
+    <section class="card" id="pairpanel"></section>
+    <div class="status" id="status"></div>
+    <div class="disclaimer">Alat ini hanya untuk eksperimen dan edukasi, bukan nasihat keuangan. Sinyal bisa salah, jadi uji dulu di akun demo. Grafik dari TradingView, data analisis dari Twelve Data, penilaian dari Claude.</div>
+  </main>
+</div>
+
+<script>
+// URL Cloudflare Worker kamu (lihat worker.js). API key TIDAK ada di file ini.
+const API_BASE = 'https://claude-signal-proxy.USERNAME.workers.dev';
+const MODEL = 'claude-haiku-5-5';
+const OUTPUTSIZE = 100;
+const MIN_RR = 1.5;
+const TD_GAP_MS = 8000; // jeda antar request Twelve Data (paket gratis sekitar 8 kredit per menit)
+
+const STYLES = {
+  scalping: { label: 'Scalping',    entry: '5min', htf: '15min', tv: '5',   desc: 'entry M5, konteks M15' },
+  intraday: { label: 'Intraday',    entry: '15min', htf: '1h',   tv: '15',  desc: 'entry M15, konteks H1' },
+  daytrade: { label: 'Day Trading', entry: '1h',   htf: '4h',    tv: '60',  desc: 'entry H1, konteks H4' },
+  swing:    { label: 'Swing',       entry: '4h',   htf: '1day',  tv: '240', desc: 'entry H4, konteks D1' }
+};
+
+const PAIRS = [
+  { s: 'XAU/USD', tv: 'OANDA:XAUUSD',    n: 'Gold / US Dollar',              g: 'Komoditas' },
+  { s: 'XAG/USD', tv: 'OANDA:XAGUSD',    n: 'Silver / US Dollar',            g: 'Komoditas' },
+  { s: 'EUR/USD', tv: 'FX:EURUSD',       n: 'Euro / US Dollar',              g: 'Forex' },
+  { s: 'GBP/USD', tv: 'FX:GBPUSD',       n: 'British Pound / US Dollar',     g: 'Forex' },
+  { s: 'USD/JPY', tv: 'FX:USDJPY',       n: 'US Dollar / Japanese Yen',      g: 'Forex' },
+  { s: 'USD/CHF', tv: 'FX:USDCHF',       n: 'US Dollar / Swiss Franc',       g: 'Forex' },
+  { s: 'AUD/USD', tv: 'FX:AUDUSD',       n: 'Australian Dollar / US Dollar', g: 'Forex' },
+  { s: 'USD/CAD', tv: 'FX:USDCAD',       n: 'US Dollar / Canadian Dollar',   g: 'Forex' },
+  { s: 'NZD/USD', tv: 'FX:NZDUSD',       n: 'New Zealand Dollar / US Dollar',g: 'Forex' },
+  { s: 'EUR/JPY', tv: 'FX:EURJPY',       n: 'Euro / Japanese Yen',           g: 'Forex' },
+  { s: 'GBP/JPY', tv: 'FX:GBPJPY',       n: 'British Pound / Japanese Yen',  g: 'Forex' },
+  { s: 'EUR/GBP', tv: 'FX:EURGBP',       n: 'Euro / British Pound',          g: 'Forex' },
+  { s: 'BTC/USD', tv: 'BITSTAMP:BTCUSD', n: 'Bitcoin / US Dollar',           g: 'Crypto' },
+  { s: 'ETH/USD', tv: 'BITSTAMP:ETHUSD', n: 'Ethereum / US Dollar',          g: 'Crypto' }
+];
+
+// Pair yang dipindai otomatis untuk sinyal terbaik harian
+const SCAN_PAIRS = ['XAU/USD', 'EUR/USD', 'GBP/USD', 'USD/JPY', 'GBP/JPY', 'EUR/JPY', 'AUD/USD', 'BTC/USD'];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setStatus = msg => { $('status').textContent = msg; };
+const configured = !API_BASE.includes('USERNAME');
+
+function fmt(v, symbol) {
+  if (!Number.isFinite(v)) return '-';
+  const d = symbol.includes('JPY') ? 3 : (Math.abs(v) >= 100 ? 2 : 5);
+  return v.toFixed(d);
+}
+
+let style = 'scalping';
+let pair = PAIRS[0];
+const activeScans = new Set();
+const analyzing = new Set();
+let lastTD = 0;
+
+// ---------- Indikator (dihitung di browser, tidak memakai kredit) ----------
+function ema(values, period) {
+  const k = 2 / (period + 1);
+  let prev = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  const out = new Array(period - 1).fill(null);
+  out.push(prev);
+  for (let i = period; i < values.length; i++) {
+    prev = values[i] * k + prev * (1 - k);
+    out.push(prev);
+  }
+  return out;
+}
+
+function atr(candles, period = 14) {
+  const trs = candles.map((c, i) => i === 0
+    ? c.high - c.low
+    : Math.max(c.high - c.low, Math.abs(c.high - candles[i - 1].close), Math.abs(c.low - candles[i - 1].close)));
+  const recent = trs.slice(-period);
+  return recent.reduce((a, b) => a + b, 0) / recent.length;
+}
+
+function rsi(closes, period = 14) {
+  const diffs = closes.slice(1).map((c, i) => c - closes[i]).slice(-period);
+  let gain = 0, loss = 0;
+  for (const d of diffs) { if (d >= 0) gain += d; else loss -= d; }
+  const avgG = gain / period, avgL = loss / period;
+  if (avgL === 0) return 100;
+  return 100 - 100 / (1 + avgG / avgL);
+}
+
+function summarize(symbol, candles, interval, label) {
+  const d = v => fmt(v, symbol);
+  const closes = candles.map(c => c.close);
+  const last = candles.at(-1);
+  const e20 = ema(closes, 20).at(-1);
+  const e50 = ema(closes, 50).at(-1);
+  const a14 = atr(candles, 14);
+  const r14 = rsi(closes, 14);
+  const win = candles.slice(-20);
+  const hi = Math.max(...win.map(c => c.high));
+  const lo = Math.min(...win.map(c => c.low));
+  let trend = 'campuran / sideways';
+  if (last.close > e20 && e20 > e50) trend = 'uptrend';
+  else if (last.close < e20 && e20 < e50) trend = 'downtrend';
+  const rows = win.map(c => `${c.datetime} O:${d(c.open)} H:${d(c.high)} L:${d(c.low)} C:${d(c.close)}`).join('\n');
+  const text = `[${label} | ${interval}] ${symbol}
+Harga terakhir: ${d(last.close)} | EMA20: ${d(e20)} | EMA50: ${d(e50)} | Tren: ${trend}
+ATR14: ${d(a14)} | RSI14: ${r14.toFixed(1)} | Swing high/low 20 candle: ${d(hi)} / ${d(lo)}
+20 candle terakhir (lama ke baru):
+${rows}`;
+  return { text, last: last.close };
+}
+
+// ---------- Data pasar lewat Worker ----------
+async function tdGate() {
+  const slot = Math.max(Date.now(), lastTD + TD_GAP_MS);
+  lastTD = slot;
+  const wait = slot - Date.now();
+  if (wait > 0) await sleep(wait);
+}
+
+async function fetchCandles(symbol, interval) {
+  await tdGate();
+  const url = `${API_BASE}/candles?symbol=${encodeURIComponent(symbol)}&interval=${interval}&outputsize=${OUTPUTSIZE}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok || data.status === 'error' || !Array.isArray(data.values)) {
+    throw new Error(`Data: ${data.message || res.status}`);
+  }
+  return data.values.map(v => ({
+    datetime: v.datetime, open: +v.open, high: +v.high, low: +v.low, close: +v.close
+  })).reverse();
+}
+
+// ---------- Claude lewat Worker ----------
+async function askClaude(styleKey, prompt) {
+  const st = STYLES[styleKey];
+  const system = `Kamu adalah analis teknikal untuk gaya trading ${st.label} (${st.desc}). Balas HANYA dengan satu objek JSON valid tanpa markdown:
+{"signal":"BUY" | "SELL" | "NO_TRADE","entry":number|null,"stop_loss":number|null,"take_profit":number|null,"confidence":0-100,"reason":"maksimal 2 kalimat, Bahasa Indonesia"}
+Aturan: BUY berarti stop_loss < entry < take_profit. SELL berarti take_profit < entry < stop_loss. Jarak take_profit minimal ${MIN_RR} kali jarak stop_loss. Gunakan konteks timeframe lebih tinggi sebagai filter arah dan hindari melawan tren konteks tanpa alasan kuat. Jika setup tidak jelas, pilih NO_TRADE dengan level null.`;
+
+  const res = await fetch(`${API_BASE}/claude`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: MODEL, max_tokens: 600, system, messages: [{ role: 'user', content: prompt }] })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Claude: ${data.error?.message || res.status}`);
+  const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  if (a < 0 || b < 0) throw new Error('Respons Claude bukan JSON');
+  return JSON.parse(text.slice(a, b + 1));
+}
+
+// Validasi ulang di kode, jangan percaya begitu saja pada output model.
+function validate(sig) {
+  if (!['BUY', 'SELL', 'NO_TRADE'].includes(sig.signal)) {
+    return { signal: 'NO_TRADE', reason: 'Output Claude tidak valid.' };
+  }
+  if (sig.signal === 'NO_TRADE') {
+    return { signal: 'NO_TRADE', reason: sig.reason || '', confidence: sig.confidence };
+  }
+  const { entry, stop_loss: sl, take_profit: tp } = sig;
+  const reject = msg => ({ signal: 'NO_TRADE', reason: `${msg} ${sig.reason || ''}`.trim() });
+  if (![entry, sl, tp].every(Number.isFinite)) return reject('Level tidak lengkap.');
+  const orderOk = sig.signal === 'BUY' ? (sl < entry && entry < tp) : (tp < entry && entry < sl);
+  if (!orderOk) return reject('Urutan level salah.');
+  const rr = Math.abs(tp - entry) / Math.abs(entry - sl);
+  if (rr < MIN_RR) return reject(`RR di bawah ${MIN_RR}.`);
+  return { signal: sig.signal, entry, stop_loss: sl, take_profit: tp, confidence: sig.confidence, reason: sig.reason || '', rr };
+}
+
+async function analyze(p, styleKey) {
+  const st = STYLES[styleKey];
+  const entryC = await fetchCandles(p.s, st.entry);
+  const htfC = await fetchCandles(p.s, st.htf);
+  if (entryC.length < 60 || htfC.length < 60) throw new Error('Data candle kurang dari 60');
+  const e = summarize(p.s, entryC, st.entry, 'Entry');
+  const h = summarize(p.s, htfC, st.htf, 'Konteks');
+  const raw = await askClaude(styleKey, `${e.text}\n\n${h.text}\n\nTentukan sinyal untuk gaya ${st.label} berdasarkan data di atas.`);
+  return { sym: p.s, last: e.last, time: Date.now(), ...validate(raw) };
+}
+
+// ---------- Cache harian (localStorage: hanya hasil analisis, tanpa key) ----------
+const today = () => new Date().toLocaleDateString('en-CA');
+const cacheKey = s => `csrt_${today()}_${s}`;
+function getCache(s) {
+  try { return JSON.parse(localStorage.getItem(cacheKey(s))) || { results: {}, done: false }; }
+  catch { return { results: {}, done: false }; }
+}
+function setCache(s, c) {
+  try { localStorage.setItem(cacheKey(s), JSON.stringify(c)); } catch {}
+}
+function purgeOldCaches() {
+  try {
+    const keep = 'csrt_' + today();
+    const old = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('csrt_') && !k.startsWith(keep)) old.push(k);
+    }
+    old.forEach(k => localStorage.removeItem(k));
+  } catch {}
+}
+
+function findPair(sym) {
+  return PAIRS.find(p => p.s === sym) || { s: sym, tv: 'FX:' + sym.replace('/', ''), n: 'Pair kustom', g: 'Kustom' };
+}
+
+async function runOne(p, styleKey) {
+  let result;
+  try {
+    result = await analyze(p, styleKey);
+  } catch (e) {
+    result = { sym: p.s, error: e.message, time: Date.now() };
+  }
+  // baca ulang cache setelah await agar tidak menimpa hasil pair lain
+  const c = getCache(styleKey);
+  c.results[p.s] = result;
+  setCache(styleKey, c);
+  renderAll();
+  return result;
+}
+
+async function scanStyle(styleKey) {
+  if (activeScans.has(styleKey)) return;
+  activeScans.add(styleKey);
+  renderAll();
+  const pairs = SCAN_PAIRS.map(findPair);
+  let ok = 0;
+  for (let i = 0; i < pairs.length; i++) {
+    setStatus(`Memindai ${STYLES[styleKey].label}: ${pairs[i].s} (${i + 1}/${pairs.length})`);
+    const r = await runOne(pairs[i], styleKey);
+    if (!r.error) ok++;
+  }
+  if (ok > 0) {
+    const c = getCache(styleKey);
+    c.done = true;
+    setCache(styleKey, c);
+  }
+  activeScans.delete(styleKey);
+  setStatus(ok ? `Pemindaian ${STYLES[styleKey].label} selesai.` : 'Pemindaian gagal. Cek URL Worker dan koneksi.');
+  renderAll();
+}
+
+function ensureBest(styleKey) {
+  if (configured && !getCache(styleKey).done) scanStyle(styleKey);
+}
+
+function rescan() {
+  if (!configured || activeScans.has(style)) return;
+  setCache(style, { results: {}, done: false });
+  scanStyle(style);
+}
+
+async function analyzeCurrent() {
+  if (!configured) return;
+  const key = pair.s + '|' + style;
+  if (analyzing.has(key)) return;
+  analyzing.add(key);
+  renderAll();
+  await runOne(pair, style);
+  analyzing.delete(key);
+  renderAll();
+}
+
+// ---------- Render ----------
+const lvl = (label, v, sym) => `<div><span>${label}</span><b>${Number.isFinite(v) ? fmt(v, sym) : '-'}</b></div>`;
+const badgeFor = r => {
+  if (r.error) return '<span class="badge ERR">ERROR</span>';
+  if (!r.signal) return '';
+  return `<span class="badge ${r.signal}">${r.signal.replace('_', ' ')}</span>`;
+};
+
+function renderBest() {
+  const st = STYLES[style];
+  const c = getCache(style);
+  const busy = activeScans.has(style);
+  const score = r => (r.confidence || 0) * (r.rr || 0);
+  const valid = Object.values(c.results)
+    .filter(r => r.signal === 'BUY' || r.signal === 'SELL')
+    .sort((a, b) => score(b) - score(a));
+  const top = valid[0];
+  const head = `<div class="card-head">
+      <div>
+        <div class="title">Signal terbaik hari ini · ${st.label}</div>
+        <div class="muted">Dipindai otomatis dari ${SCAN_PAIRS.length} pair · entry ${st.entry}, konteks ${st.htf}</div>
+      </div>
+      <button class="btn ghost" data-action="rescan" ${busy || !configured ? 'disabled' : ''}>Pindai ulang</button>
+    </div>`;
+  if (!top) {
+    $('best').innerHTML = `<div class="card">${head}<div class="muted">${busy ? 'Sedang memindai pair...' : 'Belum ada setup valid untuk gaya ini hari ini.'}</div></div>`;
+    return;
+  }
+  $('best').innerHTML = `<div class="card">${head}
+    <div class="card-head">
+      <span class="title">${esc(top.sym)}</span>${badgeFor(top)}
+      <span class="muted">Keyakinan ${esc(top.confidence)}% · RR 1:${top.rr.toFixed(2)}</span>
+    </div>
+    <div class="levels">
+      ${lvl('Entry', top.entry, top.sym)}${lvl('Stop loss', top.stop_loss, top.sym)}${lvl('Take profit', top.take_profit, top.sym)}${lvl('Harga terakhir', top.last, top.sym)}
+    </div>
+    <div class="reason">${esc(top.reason)}</div>
+    <div class="actions"><button class="btn" data-action="pick" data-sym="${esc(top.sym)}">Buka chart ${esc(top.sym)}</button></div>
+  </div>`;
+}
+
+function renderWatchlist() {
+  const c = getCache(style);
+  const groups = {};
+  PAIRS.forEach(p => { (groups[p.g] = groups[p.g] || []).push(p); });
+  $('watchlist').innerHTML = Object.entries(groups).map(([g, list]) =>
+    `<h4>${esc(g)}</h4>` + list.map(p => {
+      const r = c.results[p.s];
+      return `<div class="wl ${p.s === pair.s ? 'sel' : ''}" data-action="pick" data-sym="${esc(p.s)}">
+        <div><div class="name">${esc(p.s)}</div><div class="sub">${esc(p.n)}</div></div>
+        <div>${r ? badgeFor(r) : ''}</div>
+      </div>`;
+    }).join('')
+  ).join('');
+}
+
+function renderPairPanel() {
+  const st = STYLES[style];
+  const key = pair.s + '|' + style;
+  const busy = analyzing.has(key);
+  const r = getCache(style).results[pair.s];
+  let body;
+  if (busy) body = `<div class="muted">Menganalisis ${esc(pair.s)}...</div>`;
+  else if (!r) body = `<div class="muted">Belum ada analisis ${esc(pair.s)} untuk gaya ini.</div>`;
+  else if (r.error) body = `<div class="reason">Gagal: ${esc(r.error)}</div>`;
+  else if (r.signal === 'NO_TRADE') body = `<div class="reason"><b>NO TRADE.</b> ${esc(r.reason)}</div>`;
+  else body = `<div class="levels">
+      ${lvl('Entry', r.entry, r.sym)}${lvl('Stop loss', r.stop_loss, r.sym)}${lvl('Take profit', r.take_profit, r.sym)}
+      <div><span>RR</span><b>1:${r.rr.toFixed(2)}</b></div>
+    </div>
+    <div class="reason">${esc(r.reason)}</div>`;
+
+  $('pairpanel').innerHTML = `
+    <div class="card-head">
+      <div>
+        <div class="title">${esc(pair.s)} · ${esc(pair.n)}</div>
+        <div class="muted">Analisis gaya ${st.label} · entry ${st.entry} · konteks ${st.htf}</div>
+      </div>
+      <button class="btn" data-action="analyze" ${busy || !configured ? 'disabled' : ''}>Analisis pair ini</button>
+    </div>
+    ${body}`;
+}
+
+function renderNotice() {
+  $('notice').innerHTML = configured ? '' :
+    `<div class="notice">Alat belum tersambung. Isi <b>API_BASE</b> di index.html dengan URL Cloudflare Worker kamu.</div>`;
+}
+
+function renderAll() {
+  document.querySelectorAll('.styles button').forEach(b => b.classList.toggle('active', b.dataset.style === style));
+  renderBest();
+  renderWatchlist();
+  renderPairPanel();
+}
+
+// ---------- Chart TradingView ----------
+let tvPromise = null;
+function loadTV() {
+  if (window.TradingView) return Promise.resolve();
+  if (!tvPromise) {
+    tvPromise = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://s3.tradingview.com/tv.js';
+      s.onload = res;
+      s.onerror = () => rej(new Error('Gagal memuat widget TradingView'));
+      document.head.appendChild(s);
+    });
+  }
+  return tvPromise;
+}
+
+async function renderChart() {
+  const box = $('chart');
+  box.innerHTML = '<div class="muted" style="padding:12px">Memuat chart...</div>';
+  try {
+    await loadTV();
+  } catch (e) {
+    box.innerHTML = `<div class="muted" style="padding:12px">${esc(e.message)}</div>`;
+    return;
+  }
+  box.innerHTML = '';
+  const id = 'tv_' + Date.now();
+  const holder = document.createElement('div');
+  holder.id = id;
+  holder.style.height = '100%';
+  box.appendChild(holder);
+  new TradingView.widget({
+    autosize: true,
+    symbol: pair.tv,
+    interval: STYLES[style].tv,
+    timezone: 'Asia/Jakarta',
+    theme: 'dark',
+    style: '1',
+    locale: 'en',
+    backgroundColor: '#131722',
+    toolbar_bg: '#1e222d',
+    allow_symbol_change: false,
+    enable_publishing: false,
+    container_id: id
+  });
+}
+
+// ---------- Pencarian pair ----------
+const searchEl = $('search');
+const dd = $('dropdown');
+let ddItems = [];
+let ddIdx = -1;
+
+function closeDrop() {
+  dd.classList.remove('open');
+  ddItems = [];
+  ddIdx = -1;
+}
+
+function paintDrop() {
+  dd.innerHTML = ddItems.length
+    ? ddItems.map((p, i) => `<div class="dd-item ${i === ddIdx ? 'active' : ''}" data-i="${i}">
+        <b>${esc(p.s)}</b><span>${esc(p.n)}</span><em>${esc(p.g)}</em></div>`).join('')
+    : '<div class="dd-item muted">Tidak ada pair yang cocok</div>';
+  dd.classList.add('open');
+}
+
+function updateDrop() {
+  const raw = searchEl.value.trim().toUpperCase();
+  const qn = raw.replace(/[\s/]/g, '');
+  if (!qn) { closeDrop(); return; }
+  ddItems = PAIRS.filter(p => p.s.replace('/', '').includes(qn) || p.n.toUpperCase().includes(raw)).slice(0, 8);
+  if (/^[A-Z]{6}$/.test(qn) && !ddItems.some(p => p.s.replace('/', '') === qn)) {
+    ddItems.push({ s: `${qn.slice(0, 3)}/${qn.slice(3)}`, tv: `FX:${qn}`, n: 'Pair kustom', g: 'Kustom' });
+  }
+  ddIdx = ddItems.length ? 0 : -1;
+  paintDrop();
+}
+
+function selectPair(p) {
+  if (!p) return;
+  pair = p;
+  searchEl.value = '';
+  closeDrop();
+  renderChart();
+  renderAll();
+}
+
+function changeStyle(s) {
+  if (!STYLES[s] || s === style) return;
+  style = s;
+  renderChart();
+  renderAll();
+  ensureBest(style);
+}
+
+searchEl.addEventListener('input', updateDrop);
+searchEl.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeDrop(); return; }
+  if (!ddItems.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); ddIdx = (ddIdx + 1) % ddItems.length; paintDrop(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); ddIdx = (ddIdx - 1 + ddItems.length) % ddItems.length; paintDrop(); }
+  else if (e.key === 'Enter') { e.preventDefault(); selectPair(ddItems[Math.max(0, ddIdx)]); }
+});
+searchEl.addEventListener('blur', () => setTimeout(closeDrop, 150));
+dd.addEventListener('mousedown', e => {
+  const el = e.target.closest('.dd-item[data-i]');
+  if (!el) return;
+  e.preventDefault();
+  selectPair(ddItems[+el.dataset.i]);
+});
+
+// ---------- Klik (delegasi) ----------
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-action]');
+  if (!el || el.disabled) return;
+  const a = el.dataset.action;
+  if (a === 'pick') selectPair(findPair(el.dataset.sym));
+  else if (a === 'style') changeStyle(el.dataset.style);
+  else if (a === 'analyze') analyzeCurrent();
+  else if (a === 'rescan') rescan();
+});
+
+// ---------- Mulai ----------
+purgeOldCaches();
+renderNotice();
+selectPair(PAIRS[0]);
+ensureBest(style);
+</script>
+</body>
+</html>
